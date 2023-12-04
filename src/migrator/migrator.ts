@@ -1,12 +1,5 @@
 import { InjectorService, LoggerService } from '@cheetah.js/core';
-import {
-  ColDiff,
-  ConnectionSettings,
-  Orm,
-  OrmService,
-  PgDriver,
-  TableDiff,
-} from '@cheetah.js/orm';
+import { ConnectionSettings, Orm, OrmService, PgDriver } from '@cheetah.js/orm';
 import { EntityStorage } from '@cheetah.js/orm';
 import globby from 'globby';
 import * as knex from 'knex';
@@ -20,11 +13,76 @@ import * as tsNode from 'ts-node';
 import * as path from 'path';
 import * as fs from 'fs';
 
-tsNode.register({
-  compilerOptions: {
-    module: 'CommonJS',
-  },
-});
+// tsNode.register({
+//   compilerOptions: {
+//     module: 'CommonJS',
+//   },
+// });
+
+export type SnapshotTable = {
+  tableName: string;
+  schema?: string;
+  columns: ColumnsInfo[];
+  indexes: SnapshotIndexInfo[];
+  foreignKeys?: ForeignKeyInfo[];
+};
+
+export type SnapshotIndexInfo = {
+  table: string;
+  indexName: string;
+  columnName: string;
+};
+
+export type ForeignKeyInfo = {
+  referencedTableName: string;
+  referencedColumnName: string;
+};
+
+export type ColumnsInfo = {
+  name: string;
+  type: string;
+  nullable?: boolean;
+  default?: string | null;
+  primary?: boolean;
+  unique?: boolean;
+  autoIncrement?: boolean;
+  length?: number;
+  isEnum?: boolean;
+  precision?: number;
+  scale?: number;
+  isDecimal?: boolean;
+  enumItems?: string[] | number[];
+  foreignKeys?: ForeignKeyInfo[];
+};
+
+export type SqlActionType = 'CREATE' | 'DELETE' | 'ALTER' | 'INDEX';
+
+export type ColDiff = {
+  actionType: SqlActionType;
+  colName: string;
+  colType?: string;
+  colLength?: number;
+  indexTables?: { name: string; properties?: string[] }[];
+  colChanges?: {
+    default?: string | null;
+    primary?: boolean;
+    unique?: boolean;
+    nullable?: boolean;
+    autoIncrement?: boolean;
+    enumItems?: string[] | number[];
+    enumModified?: boolean;
+    precision?: number;
+    scale?: number;
+    foreignKeys?: ForeignKeyInfo[];
+  };
+};
+
+export type TableDiff = {
+  tableName: string;
+  schema?: string;
+  newTable?: boolean;
+  colDiffs: ColDiff[];
+};
 
 export class Migrator {
   config: ConnectionSettings<any>;
@@ -271,6 +329,7 @@ export class Migrator {
         });
       }
     } else {
+      console.log(columnType);
       switch (columnType) {
         case 'varchar':
           columnBuilder = builder.string(columnName, diff.colLength);
@@ -280,19 +339,21 @@ export class Migrator {
           break;
         case 'int':
         case 'numeric':
+        case 'integer':
           columnBuilder = builder.integer(columnName, diff.colLength);
           break;
         case 'bigint':
           columnBuilder = builder.bigInteger(columnName);
           break;
-        case 'float':
-          columnBuilder = builder.float(columnName);
-          break;
         case 'double':
-          columnBuilder = builder.double(columnName);
-          break;
+        case 'float4':
+        case 'float':
         case 'decimal':
-          columnBuilder = builder.decimal(columnName);
+          columnBuilder = builder.decimal(
+            columnName,
+            diff.colChanges?.precision,
+            diff.colChanges?.scale,
+          );
           break;
         case 'date':
           columnBuilder = builder.date(columnName);
@@ -429,7 +490,7 @@ export class Migrator {
     await this.startConnection(configFile);
     const snapshotBd = await this.snapshotBd();
     const snapshotEntities = await this.snapshotEntities();
-    const calculator = new DiffCalculator(this.entities);
+    const calculator = new DiffCalculator(this.entities, this.orm.driverInstance);
     const diff = calculator.diff(snapshotBd, snapshotEntities);
 
     const sql = this.lastTreatment(await this.run(diff));

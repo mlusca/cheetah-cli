@@ -1,17 +1,13 @@
-import { EntityStorage } from '@cheetah.js/orm';
-import {
-  ColDiff,
-  ColumnsInfo,
-  SnapshotTable,
-  TableDiff,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-} from '@cheetah.js/orm/driver/driver.interface';
+import { DriverInterface, EntityStorage, PgDriver } from '@cheetah.js/orm';
+import { ColDiff, ColumnsInfo, SnapshotTable, TableDiff } from './migrator';
 
 export class DiffCalculator {
   private entities: EntityStorage;
 
-  constructor(entities: EntityStorage) {
+  constructor(
+    entities: EntityStorage,
+    private driver: DriverInterface,
+  ) {
     this.entities = entities;
   }
 
@@ -175,6 +171,8 @@ export class DiffCalculator {
         nullable: entityCol.nullable,
         enumItems: entityCol.enumItems,
         foreignKeys: entityCol.foreignKeys ?? undefined,
+        precision: entityCol.precision ?? undefined,
+        scale: entityCol.scale ?? undefined,
       },
     });
 
@@ -186,16 +184,28 @@ export class DiffCalculator {
     entityCol: ColumnsInfo,
     colDiffs: ColDiff[],
   ): void {
-    if (bdCol.type === 'integer' && bdCol.primary) {
-      bdCol.type = 'numeric';
-      bdCol.length = 11;
-    }
+    // if (bdCol.type === 'integer' && bdCol.primary) {
+    //   bdCol.type = 'numeric';
+    //   bdCol.length = 11;
+    // }
+    const isPostgres = this.driver instanceof PgDriver;
+
     if (bdCol.type === 'USER-DEFINED') {
       bdCol.type = 'enum';
     }
+
     const colT = this.convertEntityTypeToSqlType(entityCol.type);
     const colType = colT.type;
-    const length = entityCol.length ?? colT.len;
+    let length = entityCol.length ?? colT.len;
+
+    if (colType === 'integer' && isPostgres) {
+      length = 32;
+    }
+
+    if (bdCol.isDecimal && isPostgres) {
+      bdCol.type = 'decimal';
+      length = bdCol.precision ?? 0;
+    }
 
     if (!bdCol.type.includes(colType) || bdCol.length !== length) {
       colDiffs.push({
@@ -205,6 +215,8 @@ export class DiffCalculator {
         colLength: length,
         colChanges: {
           enumItems: entityCol.enumItems || undefined,
+          precision: entityCol.precision ?? undefined,
+          scale: entityCol.scale ?? undefined,
         },
       });
     }
@@ -324,8 +336,37 @@ export class DiffCalculator {
     this.diffColumnPrimary(bdCol, entityCol, colDiffs);
     this.diffColumnUnique(bdCol, entityCol, colDiffs);
     this.diffColumnNullable(bdCol, entityCol, colDiffs);
+    this.diffColumnPrecisionAndScale(bdCol, entityCol, colDiffs);
 
     return colDiffs;
+  }
+
+  diffColumnPrecisionAndScale(
+    bdCol: ColumnsInfo,
+    entityCol: ColumnsInfo,
+    colDiffs: ColDiff[],
+  ) {
+    const bdPrecision = bdCol.precision ?? 0;
+    const entityPrecision = entityCol.precision ?? bdPrecision;
+    const bdScale = bdCol.scale ?? 0;
+    const entityScale = entityCol.scale ?? bdCol.scale;
+
+    if (
+      bdCol.isDecimal &&
+      (bdPrecision !== entityPrecision ||
+        (bdCol.isDecimal && bdScale !== entityScale))
+    ) {
+      colDiffs.push({
+        actionType: 'ALTER',
+        colType: 'decimal',
+        colName: entityCol.name,
+        colChanges: {
+          precision: entityCol.precision ?? 0,
+          scale: entityCol.scale ?? 0,
+        },
+        colLength: entityCol.length,
+      });
+    }
   }
 
   private diffColumnNullable(
@@ -352,13 +393,11 @@ export class DiffCalculator {
     switch (entityType) {
       case 'Number':
       case 'int':
-        return { type: 'numeric', len: 11 };
+        return { type: 'integer', len: 32 };
       case 'bigint':
         return { type: 'bigint' };
       case 'float':
-        return { type: 'float4' };
       case 'double':
-        return { type: 'float8' };
       case 'decimal':
         return { type: 'decimal' };
       case 'String':
@@ -387,6 +426,8 @@ export class DiffCalculator {
       if (bdCol.enumItems && entityCol.enumItems) {
         const allEnums = new Set([...bdCol.enumItems, ...entityCol.enumItems]);
         const differences = [...allEnums].filter(
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          //@ts-ignore
           (x) => !bdCol.enumItems?.includes(x) || !entityCol.enumItems?.includes(x),
         );
 

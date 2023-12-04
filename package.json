@@ -1,7 +1,7 @@
 {
   "name": "@cheetah.js/cli",
   "description": "Cheetah.js CLI - Generate migrations, models, controllers and more. (In development)",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "module": "src/index.ts",
   "scripts": {
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\""
@@ -25,7 +25,7 @@
   "bin": "./dist/run-cli.sh",
   "peerDependencies": {
     "@cheetah.js/core": "^0.1.34",
-    "@cheetah.js/orm": "^0.1.40",
+    "@cheetah.js/orm": "^0.1.42",
     "typescript": "^5.0.0"
   },
   "peerDependenciesMeta": {

@@ -54,7 +54,7 @@ describe('error on length', () => {
 
   test('should modify database column', async () => {
     await execute(
-      'CREATE TABLE "public"."user" ("id" numeric(11) PRIMARY KEY,"email" character varying(255) UNIQUE);',
+      'CREATE TABLE "public"."user" ("id" integer PRIMARY KEY,"email" character varying(255) UNIQUE);',
     );
     class User extends BaseEntity {
       @PrimaryKey()
@@ -85,7 +85,7 @@ describe('error on length', () => {
 
   test('should modify a column unique', async () => {
     await execute(
-      'CREATE TABLE "public"."user" ("id" numeric(11) NOT NULL PRIMARY KEY,"email" character varying(255) NOT NULL unique, "password" character varying(10) NOT NULL);',
+      'CREATE TABLE "public"."user" ("id" integer NOT NULL PRIMARY KEY,"email" character varying(255) NOT NULL unique, "password" character varying(10) NOT NULL);',
     );
     class User extends BaseEntity {
       @PrimaryKey()
@@ -113,10 +113,10 @@ describe('error on length', () => {
 
   test('should add a relation property', async () => {
     await execute(
-      'CREATE TABLE "public"."user" ("id" numeric(11) NOT NULL PRIMARY KEY,"email" character varying(255) NOT NULL unique);',
+      'CREATE TABLE "public"."user" ("id" integer NOT NULL PRIMARY KEY,"email" character varying(255) NOT NULL unique);',
     );
     await execute(
-      'CREATE TABLE "public"."address" ("id" numeric(11) NOT NULL PRIMARY KEY);',
+      'CREATE TABLE "public"."address" ("id" integer NOT NULL PRIMARY KEY);',
     );
     class User extends BaseEntity {
       @PrimaryKey()
@@ -151,17 +151,17 @@ describe('error on length', () => {
 
   test('should add a relation property', async () => {
     await execute(
-      'CREATE TABLE "public"."user" ("id" numeric(11) NOT NULL PRIMARY KEY,"email" character varying(255) NOT NULL);',
+      'CREATE TABLE "public"."user" ("id" integer NOT NULL PRIMARY KEY,"email" character varying(255) NOT NULL);',
     );
     await execute(
-      'CREATE TABLE "public"."address" ("id" numeric(11) NOT NULL PRIMARY KEY, "user" numeric(11) NOT NULL);',
+      'CREATE TABLE "public"."address" ("id" integer NOT NULL PRIMARY KEY, "user" integer NOT NULL);',
     );
     await execute(
       'ALTER TABLE "public"."address" ADD CONSTRAINT "address_user_fk" FOREIGN KEY ("user") REFERENCES "public"."user" ("id");',
     );
 
     class User extends BaseEntity {
-      @PrimaryKey()
+      @PrimaryKey() 
       id: number;
 
       @Property()
@@ -190,7 +190,7 @@ describe('error on length', () => {
 
   test('should add a index property with multiple indexes', async () => {
     await execute(
-      'CREATE TABLE "public"."user" ("id" numeric(11) NOT NULL PRIMARY KEY,"email" character varying(255) NOT NULL);',
+      'CREATE TABLE "public"."user" ("id" integer NOT NULL PRIMARY KEY,"email" character varying(255) NOT NULL);',
     );
 
     class User extends BaseEntity {
@@ -500,6 +500,106 @@ describe('error on length', () => {
     expect(sql).toEqual([
       'create table "public"."user" ("id" serial primary key, "created_at" timestamptz not null, "user_owner_id" integer not null);',
       'alter table "public"."user" add constraint "user_user_owner_id_fk" foreign key ("user_owner_id") references "user" ("id");',
+    ]);
+    await execute(sql.join('\n'));
+  });
+
+  test('should snapshot database with decimal value', async () => {
+    class User extends BaseEntity {
+      @PrimaryKey({ autoIncrement: true })
+      id: number;
+
+      @Property({ length: 3 })
+      createdAt: Date;
+
+      @Property({ dbType: 'decimal', precision: 4, scale: 2 })
+      money: number;
+    }
+
+    Entity()(User);
+
+    const migrator = new Migrator();
+    const sql = await migrator.generateMigration(process.cwd(), true);
+
+    expect(sql).toEqual([
+      "create table \"public\".\"user\" (\"id\" serial primary key, \"created_at\" timestamptz(3) not null, \"money\" decimal(4, 2) not null);"
+    ]);
+    await execute(sql.join('\n'));
+  });
+
+  test('should change the precision or scale', async () => {
+    await execute(
+      "create table \"public\".\"user\" (\"id\" serial primary key, \"created_at\" timestamptz(3) not null, \"money\" decimal(4, 2) not null);"
+    )
+    
+    class User extends BaseEntity {
+      @PrimaryKey({ autoIncrement: true })
+      id: number;
+
+      @Property({ length: 3 })
+      createdAt: Date;
+
+      @Property({ dbType: 'decimal', precision: 7, scale: 3 })
+      money: number;
+    }
+
+    Entity()(User);
+
+    const migrator = new Migrator();
+    const sql = await migrator.generateMigration(process.cwd(), true);
+
+    expect(sql).toEqual([
+      "alter table \"public\".\"user\" alter column \"money\" drop default;",
+      "alter table \"public\".\"user\" alter column \"money\" type decimal(7, 3) using (\"money\"::decimal(7, 3));"
+    ]);
+    await execute(sql.join('\n'));
+  });
+
+  test('should add float column', async () => {
+    class User extends BaseEntity {
+      @PrimaryKey({ autoIncrement: true })
+      id: number;
+
+      @Property({ length: 3 })
+      createdAt: Date;
+
+      @Property({ dbType: 'float', precision: 10 })
+      money: number;
+    }
+
+    Entity()(User);
+
+    const migrator = new Migrator();
+    const sql = await migrator.generateMigration(process.cwd(), true);
+
+    expect(sql).toEqual([
+      "create table \"public\".\"user\" (\"id\" serial primary key, \"created_at\" timestamptz(3) not null, \"money\" decimal(10, 2) not null);"
+    ]);
+    await execute(sql.join('\n'));
+  });
+
+  test('should alter float column', async () => {
+    await execute("create table \"public\".\"user\" (\"id\" serial primary key, \"created_at\" timestamptz(3) not null, \"money\" decimal(10, 2) not null);")
+
+    class User extends BaseEntity {
+      @PrimaryKey({ autoIncrement: true })
+      id: number;
+
+      @Property({ length: 3 })
+      createdAt: Date;
+
+      @Property({ dbType: 'float', precision: 10, scale: 3 })
+      money: number;
+    }
+
+    Entity()(User);
+
+    const migrator = new Migrator();
+    const sql = await migrator.generateMigration(process.cwd(), true);
+
+    expect(sql).toEqual([
+      "alter table \"public\".\"user\" alter column \"money\" drop default;",
+      "alter table \"public\".\"user\" alter column \"money\" type decimal(10, 3) using (\"money\"::decimal(10, 3));"
     ]);
     await execute(sql.join('\n'));
   });
