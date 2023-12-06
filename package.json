@@ -1,7 +1,7 @@
 {
   "name": "@cheetah.js/cli",
   "description": "Cheetah.js CLI - Generate migrations, models, controllers and more. (In development)",
-  "version": "0.1.11",
+  "version": "0.1.13",
   "module": "src/index.ts",
   "scripts": {
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\""
