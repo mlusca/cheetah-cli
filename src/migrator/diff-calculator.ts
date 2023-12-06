@@ -311,7 +311,6 @@ export class DiffCalculator {
           });
         }
         // else if (!bdFK) {
-        //   console.log(bdFK, 'lu')
         //   colDiffs.push({
         //     actionType: 'ALTER',
         //     colName: entityCol.name,

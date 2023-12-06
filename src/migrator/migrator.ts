@@ -13,12 +13,6 @@ import * as tsNode from 'ts-node';
 import * as path from 'path';
 import * as fs from 'fs';
 
-tsNode.register({
-  compilerOptions: {
-    module: 'CommonJS',
-  },
-});
-
 export type SnapshotTable = {
   tableName: string;
   schema?: string;
@@ -102,6 +96,14 @@ export class Migrator {
   async startConnection(basePath: string = process.cwd()) {
     await this.initConfigFile(basePath);
     await this.initKnex();
+  }
+
+  useTsNode() {
+    tsNode.register({
+      compilerOptions: {
+        module: 'CommonJS',
+      },
+    });
   }
 
   private async initConfigFile(basePath: string) {
@@ -329,7 +331,6 @@ export class Migrator {
         });
       }
     } else {
-      console.log(columnType);
       switch (columnType) {
         case 'varchar':
           columnBuilder = builder.string(columnName, diff.colLength);

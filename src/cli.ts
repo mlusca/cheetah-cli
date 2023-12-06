@@ -13,6 +13,7 @@ program
   .description('generate a new migration file with a diff')
   .action(async (str, options) => {
     const migrator = new Migrator();
+    migrator.useTsNode();
     await migrator.generateMigration();
     process.exit(0);
   });
@@ -22,6 +23,7 @@ program
   .description('run all pending migrations')
   .action(async (str, options) => {
     const migrator = new Migrator();
+    migrator.useTsNode();
     await migrator.migrate();
     process.exit(0);
   });
